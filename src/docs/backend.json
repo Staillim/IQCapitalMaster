@@ -1,0 +1,316 @@
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Representa un perfil de usuario dentro de la aplicación IQCapital Master.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único para el perfil de usuario."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "El nombre del usuario."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "El apellido del usuario."
+        },
+        "email": {
+          "type": "string",
+          "description": "La dirección de correo electrónico del usuario.",
+          "format": "email"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "El número de teléfono del usuario."
+        },
+        "registrationDate": {
+          "type": "string",
+          "description": "La fecha y hora en que el usuario se registró.",
+          "format": "date-time"
+        },
+        "role": {
+          "type": "string",
+          "description": "El rol del usuario.",
+          "enum": [
+            "cliente",
+            "asociado",
+            "admin"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "email",
+        "phoneNumber",
+        "registrationDate",
+        "role"
+      ]
+    },
+    "Account": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Account",
+      "type": "object",
+      "description": "Representa una cuenta financiera del usuario dentro de la aplicación IQCapital Master.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único para la cuenta."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Referencia a UserProfile. (Relación: UserProfile 1:N Account)"
+        },
+        "accountType": {
+          "type": "string",
+          "description": "El tipo de cuenta (p. ej., ahorros, préstamo)."
+        },
+        "balance": {
+          "type": "number",
+          "description": "El saldo actual de la cuenta."
+        },
+        "creationDate": {
+          "type": "string",
+          "description": "La fecha y hora en que se creó la cuenta.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "accountType",
+        "balance",
+        "creationDate"
+      ]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Representa una transacción financiera asociada a una cuenta de usuario.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único para la transacción."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Referencia a Account. (Relación: Account 1:N Transaction)"
+        },
+        "transactionType": {
+          "type": "string",
+          "description": "El tipo de transacción (p. ej., depósito, retiro, pago de préstamo, ahorro, abono_prestamo)."
+        },
+        "amount": {
+          "type": "number",
+          "description": "El monto de la transacción."
+        },
+        "transactionDate": {
+          "type": "string",
+          "description": "La fecha y hora en que ocurrió la transacción.",
+          "format": "date-time"
+        },
+        "description": {
+          "type": "string",
+          "description": "Una descripción de la transacción."
+        }
+      },
+      "required": [
+        "id",
+        "accountId",
+        "transactionType",
+        "amount",
+        "transactionDate"
+      ]
+    },
+    "Loan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Loan",
+      "type": "object",
+      "description": "Representa un préstamo asociado a una cuenta de usuario.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único para el préstamo."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Referencia a Account. (Relación: Account 1:N Loan)"
+        },
+        "loanAmount": {
+          "type": "number",
+          "description": "El monto total del préstamo."
+        },
+        "interestRate": {
+          "type": "number",
+          "description": "La tasa de interés del préstamo."
+        },
+        "startDate": {
+          "type": "string",
+          "description": "La fecha de inicio del préstamo.",
+          "format": "date-time"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "La fecha de finalización esperada del préstamo.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "El estado actual del préstamo (p. ej., activo, pagado, en mora)."
+        }
+      },
+      "required": [
+        "id",
+        "accountId",
+        "loanAmount",
+        "interestRate",
+        "startDate",
+        "endDate",
+        "status"
+      ]
+    },
+    "Reunion": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Reunion",
+      "type": "object",
+      "description": "Representa una reunión.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único para la reunión."
+        },
+        "name": {
+          "type": "string",
+          "description": "Nombre de la reunión."
+        },
+        "date": {
+          "type": "string",
+          "description": "Fecha y hora de la reunión.",
+          "format": "date-time"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Indica si la reunión está activa para unirse."
+        }
+      },
+      "required": ["id", "name", "date", "active"]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Almacena la información del perfil del usuario. Esta ruta asegura que solo el usuario autenticado pueda acceder a sus propios datos de perfil.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "El identificador único del usuario, que coincide con el UID de Firebase Auth."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{accountId}",
+        "definition": {
+          "entityName": "Account",
+          "schema": {
+            "$ref": "#/backend/entities/Account"
+          },
+          "description": "Almacena la información de la cuenta financiera para un usuario específico. La propiedad basada en la ruta garantiza que solo el usuario pueda acceder a sus cuentas.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "El identificador único del usuario, que coincide con el UID de Firebase Auth."
+            },
+            {
+              "name": "accountId",
+              "description": "El identificador único de la cuenta."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/transactions/{transactionId}",
+        "definition": {
+          "entityName": "Transaction",
+          "schema": {
+            "$ref": "#/backend/entities/Transaction"
+          },
+          "description": "Almacena el historial de transacciones de una cuenta específica. La propiedad basada en la ruta garantiza que solo el usuario pueda acceder a sus datos de transacciones.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "El identificador único del usuario, que coincide con el UID de Firebase Auth."
+            },
+            {
+              "name": "accountId",
+              "description": "El identificador único de la cuenta."
+            },
+            {
+              "name": "transactionId",
+              "description": "El identificador único de la transacción."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/loans/{loanId}",
+        "definition": {
+          "entityName": "Loan",
+          "schema": {
+            "$ref": "#/backend/entities/Loan"
+          },
+          "description": "Almacena la información del préstamo para una cuenta específica. La propiedad basada en la ruta garantiza que solo el usuario pueda acceder a los datos de su préstamo.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "El identificador único del usuario, que coincide con el UID de Firebase Auth."
+            },
+            {
+              "name": "accountId",
+              "description": "El identificador único de la cuenta."
+            },
+            {
+              "name": "loanId",
+              "description": "El identificador único del préstamo."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/reuniones/{reunionId}",
+        "definition": {
+          "entityName": "Reunion",
+          "schema": {
+            "$ref": "#/backend/entities/Reunion"
+          },
+          "description": "Almacena información sobre las reuniones.",
+          "params": [
+            {
+              "name": "reunionId",
+              "description": "El identificador único para la reunión."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "La estructura de Firestore está diseñada para gestionar de forma segura los perfiles de usuario, cuentas, transacciones y préstamos para la aplicación IQCapital Master. Utiliza la propiedad basada en la ruta para los datos relacionados con el usuario, garantizando el aislamiento de los datos y reglas de seguridad simplificadas. Específicamente, las cuentas, transacciones y préstamos de cada usuario se almacenan en su respectivo perfil de usuario, lo que permite un control de acceso directo basado en el ID del usuario autenticado.\n\nIndependencia de la autorización:\n* Las cuentas, transacciones y préstamos se almacenan como subcolecciones en `/users/{userId}`, y no se requieren atributos principales para determinar el acceso. Toda la autorización depende únicamente de `request.auth.uid` y la ruta.\n\nQAPs:\n* La estructura utiliza segregación estructural: los perfiles de usuario se almacenan por separado en `/users/{userId}`. Las cuentas se almacenan en el perfil de cada usuario en `/users/{userId}/accounts/{accountId}`. Las transacciones están en `/users/{userId}/accounts/{accountId}/transactions/{transactionId}`, y los Préstamos en `/users/{userId}/accounts/{accountId}/loans/{loanId}`. Esto evita la mezcla de datos con diferentes necesidades de acceso en la misma colección, lo que permite operaciones `list` seguras porque los datos almacenados en las subcolecciones están implícitamente limitados al usuario identificado por `userId`."
+  }
+}

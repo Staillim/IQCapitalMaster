@@ -1,0 +1,270 @@
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user profile within the FAP Mobile Finance application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user profile."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user.",
+          "format": "email"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The phone number of the user."
+        },
+        "registrationDate": {
+          "type": "string",
+          "description": "The date and time when the user registered.",
+          "format": "date-time"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the user.",
+          "enum": ["cliente"]
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "email",
+        "phoneNumber",
+        "registrationDate",
+        "role"
+      ]
+    },
+    "Account": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Account",
+      "type": "object",
+      "description": "Represents a user's financial account within the FAP Mobile Finance application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the account."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N Account)"
+        },
+        "accountType": {
+          "type": "string",
+          "description": "The type of the account (e.g., savings, loan)."
+        },
+        "balance": {
+          "type": "number",
+          "description": "The current balance of the account."
+        },
+        "creationDate": {
+          "type": "string",
+          "description": "The date and time when the account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "accountType",
+        "balance",
+        "creationDate"
+      ]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Represents a financial transaction associated with a user account.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the transaction."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Reference to Account. (Relationship: Account 1:N Transaction)"
+        },
+        "transactionType": {
+          "type": "string",
+          "description": "The type of transaction (e.g., deposit, withdrawal, loan payment)."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the transaction."
+        },
+        "transactionDate": {
+          "type": "string",
+          "description": "The date and time when the transaction occurred.",
+          "format": "date-time"
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the transaction."
+        }
+      },
+      "required": [
+        "id",
+        "accountId",
+        "transactionType",
+        "amount",
+        "transactionDate"
+      ]
+    },
+    "Loan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Loan",
+      "type": "object",
+      "description": "Represents a loan associated with a user account.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the loan."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Reference to Account. (Relationship: Account 1:N Loan)"
+        },
+        "loanAmount": {
+          "type": "number",
+          "description": "The total amount of the loan."
+        },
+        "interestRate": {
+          "type": "number",
+          "description": "The interest rate for the loan."
+        },
+        "startDate": {
+          "type": "string",
+          "description": "The start date of the loan.",
+          "format": "date-time"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "The expected end date of the loan.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the loan (e.g., active, paid off, defaulted)."
+        }
+      },
+      "required": [
+        "id",
+        "accountId",
+        "loanAmount",
+        "interestRate",
+        "startDate",
+        "endDate",
+        "status"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profile information. This path ensures that only the authenticated user can access their own profile data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user, matching the Firebase Auth UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{accountId}",
+        "definition": {
+          "entityName": "Account",
+          "schema": {
+            "$ref": "#/backend/entities/Account"
+          },
+          "description": "Stores financial account information for a specific user. Path-based ownership ensures only the user can access their accounts.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user, matching the Firebase Auth UID."
+            },
+            {
+              "name": "accountId",
+              "description": "The unique identifier for the account."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{accountId}/transactions/{transactionId}",
+        "definition": {
+          "entityName": "Transaction",
+          "schema": {
+            "$ref": "#/backend/entities/Transaction"
+          },
+          "description": "Stores transaction history for a specific account. Path-based ownership ensures only the user can access their transaction data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user, matching the Firebase Auth UID."
+            },
+            {
+              "name": "accountId",
+              "description": "The unique identifier for the account."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier for the transaction."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{accountId}/loans/{loanId}",
+        "definition": {
+          "entityName": "Loan",
+          "schema": {
+            "$ref": "#/backend/entities/Loan"
+          },
+          "description": "Stores loan information for a specific account. Path-based ownership ensures only the user can access their loan data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user, matching the Firebase Auth UID."
+            },
+            {
+              "name": "accountId",
+              "description": "The unique identifier for the account."
+            },
+            {
+              "name": "loanId",
+              "description": "The unique identifier for the loan."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to securely manage user profiles, accounts, transactions, and loans for the FAP Mobile Finance application. It utilizes path-based ownership for user-related data, ensuring data isolation and simplified security rules. Specifically, each user's accounts, transactions, and loans are stored under their respective user profile, enabling straightforward access control based on the authenticated user's ID.\n\nAuthorization Independence:\n*   Accounts, transactions, and loans are stored as subcollections under `/users/{userId}`, and no parent attributes are required to determine access. All authorization depends only on the `request.auth.uid` and the path.\n\nQAPs:\n*   The structure uses structural segregation: user profiles are stored separately in `/users/{userId}`. Accounts are stored under each user's profile in `/users/{userId}/accounts/{accountId}`. Transactions are under `/users/{userId}/accounts/{accountId}/transactions/{transactionId}`, and Loans are under `/users/{userId}/accounts/{accountId}/loans/{loanId}`. This prevents mixing of data with different access needs in the same collection, allowing secure `list` operations because the data stored in the subcollections is implicitly scoped to the user identified by `userId`."
+  }
+}

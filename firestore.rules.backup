@@ -1,0 +1,155 @@
+/**
+ * @fileoverview Firestore Security Rules for FAP Mobile Finance application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model. Users can only access
+ * and modify data associated with their own user ID.
+ *
+ * Data Structure:
+ * All data is nested under `/users/{userId}`, including accounts, transactions,
+ * and loans. This hierarchical structure simplifies access control based on the
+ * authenticated user's ID.
+ *
+ * Key Security Decisions:
+ * - Users can only list notifications that belong to them.
+ * - Users can only create, read, update, and delete their own data.
+ * - Data validation is relaxed during the prototyping phase, focusing on
+ *   authorization and relational integrity.
+ *
+ * Denormalization for Authorization:
+ * The data structure inherently denormalizes the user ID into the path,
+ * eliminating the need for `get()` calls to verify ownership.
+ *
+ * Structural Segregation:
+ * User-specific data (accounts, transactions, loans) is stored in private
+ * subcollections under `/users/{userId}`, enabling secure `list` operations.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Checks if the request is authenticated.
+     * @return {boolean} True if the request is authenticated, false otherwise.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user's ID matches the provided user ID.
+     * @param {string} userId The user ID to compare against.
+     * @return {boolean} True if the user is signed in and the UID matches, false otherwise.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the owner of the existing document.
+     * @param {string} userId The user ID to compare against.
+     * @return {boolean} True if the user is signed in, the UID matches, and the document exists.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+    
+    /**
+     * @description Checks if the authenticated user has admin role.
+     * @return {boolean} True if the user has admin role in their profile document.
+     */
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    /**
+     * @description Rules for user profile documents.
+     * @path /users/{userId}
+     * @allow (create) User with UID 'user123' can create their profile at /users/user123.
+     * @allow (get) User with UID 'user123' can read their profile at /users/user123.
+     * @allow (list) Admin users can list all users.
+     * @allow (update) Admin users can update any user profile.
+     * @deny (create) User with UID 'user456' cannot create a profile at /users/user123.
+     * @deny (update) User with UID 'user456' cannot update the profile at /users/user123.
+     * @principle Enforces document ownership for writes, admin access for list and update.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if (isExistingOwner(userId) && request.resource.data.id == resource.data.id) || isAdmin();
+      allow delete: if isExistingOwner(userId) || isAdmin();
+    }
+
+    /**
+     * @description Rules for account documents.
+     * @path /users/{userId}/accounts/{accountId}
+     * @allow (create) User with UID 'user123' can create an account under /users/user123/accounts/account123.
+     * @allow (get) User with UID 'user123' can read their account at /users/user123/accounts/account123.
+     * @deny (create) User with UID 'user456' cannot create an account under /users/user123/accounts/account123.
+     * @deny (update) User with UID 'user456' cannot update the account at /users/user123/accounts/account123.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/accounts/{accountId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Rules for transaction documents.
+     * @path /users/{userId}/accounts/{accountId}/transactions/{transactionId}
+     * @allow (create) User with UID 'user123' can create a transaction under /users/user123/accounts/account123/transactions/transaction123.
+     * @allow (get) User with UID 'user123' can read their transaction at /users/user123/accounts/account123/transactions/transaction123.
+     * @deny (create) User with UID 'user456' cannot create a transaction under /users/user123/accounts/account123/transactions/transaction123.
+     * @deny (update) User with UID 'user456' cannot update the transaction at /users/user123/accounts/account123/transactions/transaction123.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/accounts/{accountId}/transactions/{transactionId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Rules for loan documents.
+     * @path /users/{userId}/accounts/{accountId}/loans/{loanId}
+     * @allow (create) User with UID 'user123' can create a loan under /users/user123/accounts/account123/loans/loan123.
+     * @allow (get) User with UID 'user123' can read their loan at /users/user123/accounts/account123/loans/loan123.
+     * @deny (create) User with UID 'user456' cannot create a loan under /users/user123/accounts/account123/loans/loan123.
+     * @deny (update) User with UID 'user456' cannot update the loan at /users/user123/accounts/account123/loans/loan123.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/accounts/{accountId}/loans/{loanId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+    
+     /**
+      * @description Rules for notifications documents.
+      * @path /users/{userId}/notifications/{notificationId}
+      * @allow (list) User with UID 'user123' can list their notifications under /users/user123/notifications.
+      * @deny (list) User with UID 'user456' cannot list notifications under /users/user123/notifications.
+      * @principle Restricts access to a user's own data tree.
+      */
+     match /users/{userId}/notifications/{notificationId} {
+       allow get: if isOwner(userId);
+       allow list: if isOwner(userId);
+    
+       allow create: if isOwner(userId);
+       allow update: if isExistingOwner(userId);
+       allow delete: if isExistingOwner(userId);
+     }
+  }
+}

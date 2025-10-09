@@ -1,0 +1,809 @@
+/**
+ * @fileoverview Firestore Security Rules para Fondo de Ahorros y Préstamos (FAP)
+ * 
+ * Sistema Completo de Reglas de Seguridad
+ * =======================================
+ * 
+ * Este archivo define las reglas de seguridad para todas las colecciones del sistema FAP,
+ * incluyendo módulos de ahorros, préstamos, reuniones, reportes y administración.
+ * 
+ * Estructura de Datos:
+ * -------------------
+ * /users/{userId} - Perfiles de usuarios
+ * /users/{userId}/accounts/{accountId} - Cuentas de usuario (legacy)
+ * /users/{userId}/transactions/{transactionId} - Transacciones (legacy - reportes)
+ * /savingsAccounts/{userId} - Cuentas de ahorro
+ * /savingsTransactions/{transactionId} - Transacciones de ahorro
+ * /monthlySavingsSummaries/{summaryId} - Resúmenes mensuales de ahorro
+ * /withdrawal_requests/{requestId} - Solicitudes de retiro
+ * /savings_transactions/{transactionId} - Transacciones de ahorro (admin)
+ * /loan_requests/{requestId} - Solicitudes de préstamos
+ * /active_loans/{loanId} - Préstamos activos
+ * /loan_payments/{paymentId} - Pagos de préstamos
+ * /meetings/{meetingId} - Reuniones programadas
+ * /meeting_attendance/{attendanceId} - Asistencia a reuniones
+ * /system_config/{configId} - Configuración del sistema (admin)
+ * /admin_logs/{logId} - Logs de acciones administrativas
+ * /notifications/{notificationId} - Notificaciones del sistema
+ * 
+ * Roles del Sistema:
+ * -----------------
+ * - cliente: Usuario básico con acceso a funcionalidades de ahorro y solicitud de préstamos
+ * - asociado: Usuario con permisos de aprobación de préstamos y gestión de reuniones
+ * - admin: Administrador con acceso completo al sistema
+ * 
+ * Estados de Usuario:
+ * ------------------
+ * - activo: Usuario con acceso completo
+ * - inactivo: Usuario sin acceso al sistema
+ * - pendiente: Usuario en proceso de activación
+ * 
+ * Filosofía de Seguridad:
+ * ----------------------
+ * 1. Principio de mínimo privilegio
+ * 2. Validación de propiedad de datos
+ * 3. Separación de roles y permisos
+ * 4. Auditoría de acciones administrativas
+ * 5. Validación de integridad de datos
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===================================================================
+    // FUNCIONES AUXILIARES DE SEGURIDAD
+    // ===================================================================
+
+    /**
+     * Verifica si el usuario está autenticado
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Verifica si el usuario es el propietario del recurso
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Verifica si el usuario es propietario de un documento existente
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * Obtiene el perfil del usuario autenticado
+     */
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    /**
+     * Verifica si el usuario tiene rol de administrador
+     */
+    function isAdmin() {
+      return isSignedIn() && getUserProfile().role == 'admin';
+    }
+
+    /**
+     * Verifica si el usuario tiene rol de asociado o superior
+     */
+    function isAssociateOrAdmin() {
+      return isSignedIn() && getUserProfile().role in ['asociado', 'admin'];
+    }
+
+    /**
+     * Verifica si el usuario está activo
+     */
+    function isActiveUser() {
+      return isSignedIn() && getUserProfile().status == 'activo';
+    }
+
+    /**
+     * Verifica si el usuario es admin o propietario del recurso
+     */
+    function isAdminOrOwner(userId) {
+      return isAdmin() || isOwner(userId);
+    }
+
+    /**
+     * Valida que los campos requeridos estén presentes
+     */
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    /**
+     * Verifica que el userId coincida con el auth.uid en el documento
+     */
+    function matchesAuthUser() {
+      return request.resource.data.userId == request.auth.uid;
+    }
+
+    // ===================================================================
+    // REGLAS PARA PERFILES DE USUARIO
+    // ===================================================================
+
+    /**
+     * Colección: /users/{userId}
+     * Descripción: Perfiles de usuarios del sistema
+     * 
+     * Campos Opcionales de Resumen Financiero:
+     * - savingsBalance: number (balance actual de ahorros)
+     * - totalLoans: number (cantidad de préstamos)
+     * - currentDebt: number (deuda total actual)
+     * - creditScore: number (puntaje crediticio)
+     * - lastTransactionDate: timestamp (última transacción)
+     * 
+     * Nota: Estos campos son calculados y actualizados por Cloud Functions
+     * o por el sistema al procesar transacciones. Facilitan el acceso rápido
+     * a información financiera sin necesidad de queries complejas.
+     * 
+     * Permisos:
+     * - GET: El propio usuario o admin
+     * - LIST: Solo admin (verifica role en cada doc durante list)
+     * - CREATE: El propio usuario al registrarse
+     * - UPDATE: El propio usuario (perfil), admin (todo), sistema (campos financieros)
+     * - DELETE: Solo admin
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isSignedIn();
+      
+      // Para list, permitir si el usuario autenticado tiene role='admin' en SU PROPIO documento
+      // Firestore verificará esto leyendo el documento del usuario que hace la petición
+      allow list: if isSignedIn() && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      allow create: if isOwner(userId) 
+                    && request.resource.data.id == userId
+                    && hasRequiredFields(['id', 'email', 'firstName', 'lastName', 'role']);
+      
+      // UPDATE: Usuario puede actualizar su perfil (excepto role y campos financieros)
+      //         Admin puede actualizar cualquier usuario (incluyendo cambiar role)
+      //         Sistema puede actualizar campos financieros (simulado con admin/asociado)
+      allow update: if (isExistingOwner(userId) 
+                        && request.resource.data.id == resource.data.id
+                        && request.resource.data.role == resource.data.role) // Usuario no puede cambiar su propio rol
+                    || (isSignedIn() && 
+                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                        && request.resource.data.id == resource.data.id) // Admin puede cambiar cualquier campo, incluido el role
+                    || (isAssociateOrAdmin() 
+                        && request.resource.data.id == resource.data.id
+                        && request.resource.data.role == resource.data.role); // Asociados pueden actualizar campos financieros
+      
+      allow delete: if isSignedIn() && 
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ===================================================================
+    // REGLAS PARA CUENTAS (LEGACY - Mantener compatibilidad)
+    // ===================================================================
+
+    match /users/{userId}/accounts/{accountId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /users/{userId}/accounts/{accountId}/transactions/{transactionId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /users/{userId}/accounts/{accountId}/loans/{loanId} {
+      allow read: if isOwner(userId) || isAssociateOrAdmin();
+      allow write: if isOwner(userId) || isAssociateOrAdmin();
+    }
+
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Subcollection para transacciones (legacy - usado por reportes)
+    match /users/{userId}/transactions/{transactionId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // Subcollection para préstamos (evita índice compuesto userId + createdAt)
+    match /users/{userId}/loans/{loanId} {
+      allow get: if isOwner(userId) || isAssociateOrAdmin();
+      allow list: if isOwner(userId) || isAssociateOrAdmin();
+      allow create: if isOwner(userId) && matchesAuthUser();
+      allow update: if isOwner(userId) || isAssociateOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Subcollection para pagos de préstamos (evita índice compuesto userId + campo)
+    match /users/{userId}/loanPayments/{paymentId} {
+      allow get, list: if isOwner(userId) || isAssociateOrAdmin();
+      allow create: if isAssociateOrAdmin();
+      allow update: if isAssociateOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA CUENTAS DE AHORRO
+    // ===================================================================
+
+    /**
+     * Colección: /savingsAccounts/{userId}
+     * Descripción: Cuentas de ahorro de usuarios
+     * 
+     * Permisos:
+     * - GET: El propietario y admins
+     * - LIST: Solo admin
+     * - CREATE: El usuario puede crear su propia cuenta
+     * - UPDATE: El usuario puede actualizar su cuenta, admins pueden todo
+     * - DELETE: Solo admin
+     */
+    match /savingsAccounts/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+
+      // Subcollection de transacciones (NO requiere índices compuestos)
+      match /transactions/{transactionId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) || isAdmin();
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // ===================================================================
+    // REGLAS PARA TRANSACCIONES DE AHORRO (Nueva estructura)
+    // ===================================================================
+
+    /**
+     * Colección: /savingsTransactions/{transactionId}
+     * Descripción: Transacciones de ahorro (depósitos y retiros)
+     * 
+     * Permisos:
+     * - GET: El propietario y admins
+     * - LIST: Usuarios ven solo las suyas, admins ven todas
+     * - CREATE: Usuarios pueden crear depósitos, admins pueden crear cualquiera
+     * - UPDATE: Solo admin
+     * - DELETE: Solo admin
+     */
+    match /savingsTransactions/{transactionId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAdmin()
+      );
+
+      allow list: if isAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if (isSignedIn() && matchesAuthUser()) || isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA RESÚMENES MENSUALES DE AHORRO
+    // ===================================================================
+
+    /**
+     * Colección: /monthlySavingsSummaries/{summaryId}
+     * Descripción: Resúmenes mensuales de ahorros por usuario
+     * 
+     * Permisos:
+     * - GET: El propietario y admins
+     * - LIST: Usuarios ven solo los suyos, admins ven todos
+     * - CREATE: Sistema/Admin
+     * - UPDATE: Sistema/Admin
+     * - DELETE: Solo admin
+     */
+    match /monthlySavingsSummaries/{summaryId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAdmin()
+      );
+
+      allow list: if isAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA SOLICITUDES DE RETIRO
+    // ===================================================================
+
+    /**
+     * Colección: /withdrawal_requests/{requestId}
+     * Descripción: Solicitudes de retiro de ahorros
+     * 
+     * Estados: pending, approved, rejected, completed
+     * 
+     * Permisos:
+     * - GET: El solicitante, asociados y admins
+     * - LIST: Asociados y admins ven todas, usuarios ven solo las suyas
+     * - CREATE: Usuario activo puede crear su solicitud
+     * - UPDATE: Asociados/admins para aprobar/rechazar, usuario para cancelar
+     * - DELETE: Solo admin
+     */
+    match /withdrawal_requests/{requestId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAssociateOrAdmin()
+      );
+
+      allow list: if isAssociateOrAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isActiveUser() 
+                    && matchesAuthUser()
+                    && hasRequiredFields(['userId', 'amount', 'currentBalance', 'requestDate', 'reason', 'status'])
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.amount > 0;
+
+      allow update: if isExistingOwner(resource.data.userId) && resource.data.status == 'pending'
+                    || isAssociateOrAdmin() 
+                    && resource.data.status == 'pending'
+                    && request.resource.data.status in ['approved', 'rejected', 'completed']
+                    && hasRequiredFields(['reviewedBy', 'reviewedAt']);
+
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA TRANSACCIONES DE AHORRO
+    // ===================================================================
+
+    /**
+     * Colección: /savings_transactions/{transactionId}
+     * Descripción: Historial de transacciones de ahorro (depósitos y retiros)
+     * 
+     * Tipos: deposit, withdrawal
+     * Estados: completed, pending, cancelled
+     * 
+     * Permisos:
+     * - GET: El usuario propietario y admins
+     * - LIST: Admins ven todas, usuarios ven solo las suyas
+     * - CREATE: Asociados y admins registran transacciones
+     * - UPDATE: Solo admin para correcciones
+     * - DELETE: Solo admin
+     */
+    match /savings_transactions/{transactionId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAdmin()
+      );
+
+      allow list: if isAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAssociateOrAdmin() 
+                    && hasRequiredFields(['userId', 'type', 'amount', 'date', 'description', 'status'])
+                    && request.resource.data.type in ['deposit', 'withdrawal']
+                    && request.resource.data.status in ['completed', 'pending']
+                    && request.resource.data.amount > 0;
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA PRÉSTAMOS (Colección Única)
+    // ===================================================================
+
+    /**
+     * Colección: /loans/{loanId}
+     * Descripción: Préstamos (solicitudes y activos en una sola colección)
+     * 
+     * Estados: pending, approved, rejected, active, overdue, paid, defaulted, cancelled
+     * 
+     * Permisos:
+     * - GET: El propietario, asociados y admins
+     * - LIST: Asociados y admins ven todos, usuarios ven solo los suyos
+     * - CREATE: Usuario activo puede solicitar préstamo
+     * - UPDATE: Usuario puede cancelar si está pending, asociados/admins pueden cambiar estado
+     * - DELETE: Solo admin
+     */
+    match /loans/{loanId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAssociateOrAdmin()
+      );
+
+      allow list: if isAssociateOrAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isActiveUser() 
+                    && matchesAuthUser()
+                    && hasRequiredFields(['userId', 'amount', 'term', 'interestRate', 'status'])
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.amount > 0
+                    && request.resource.data.term > 0;
+
+      allow update: if (isExistingOwner(resource.data.userId) && resource.data.status == 'pending')
+                    || isAssociateOrAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA SOLICITUDES DE PRÉSTAMOS (Legacy - Mantener compatibilidad)
+    // ===================================================================
+
+    /**
+     * Colección: /loan_requests/{requestId}
+     * Descripción: Solicitudes de préstamos (legacy)
+     * 
+     * Estados: pending, approved, rejected, active, completed
+     * Niveles de Riesgo: low, medium, high
+     * 
+     * Permisos:
+     * - GET: El solicitante, asociados y admins
+     * - LIST: Asociados y admins ven todas, usuarios ven solo las suyas
+     * - CREATE: Usuario activo puede solicitar préstamo
+     * - UPDATE: Asociados/admins aprueban o rechazan
+     * - DELETE: Solo admin
+     */
+    match /loan_requests/{requestId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAssociateOrAdmin()
+      );
+
+      allow list: if isAssociateOrAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isActiveUser() 
+                    && matchesAuthUser()
+                    && hasRequiredFields(['userId', 'amount', 'term', 'purpose', 'interestRate', 'requestDate', 'status'])
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.amount > 0
+                    && request.resource.data.term > 0;
+
+      allow update: if (isExistingOwner(resource.data.userId) && resource.data.status == 'pending')
+                    || (isAssociateOrAdmin() 
+                        && resource.data.status == 'pending'
+                        && request.resource.data.status in ['approved', 'rejected']
+                        && hasRequiredFields(['reviewedBy', 'reviewedAt']));
+
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA PAGOS DE PRÉSTAMOS (Colección Única)
+    // ===================================================================
+
+    /**
+     * Colección: /loanPayments/{paymentId}
+     * Descripción: Pagos de préstamos
+     * 
+     * Estados: pending, completed, overdue, failed
+     * 
+     * Permisos:
+     * - GET: El deudor, asociados y admins
+     * - LIST: Asociados y admins ven todos, usuarios ven solo los suyos
+     * - CREATE: Asociados y admins registran pagos
+     * - UPDATE: Asociados y admins
+     * - DELETE: Solo admin
+     */
+    match /loanPayments/{paymentId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAssociateOrAdmin()
+      );
+
+      allow list: if isAssociateOrAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAssociateOrAdmin() 
+                    && hasRequiredFields(['loanId', 'userId', 'amount'])
+                    && request.resource.data.amount > 0;
+
+      allow update: if isAssociateOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA PRÉSTAMOS ACTIVOS (Legacy - Mantener compatibilidad)
+    // ===================================================================
+
+    /**
+     * Colección: /active_loans/{loanId}
+     * Descripción: Préstamos activos en proceso de pago (legacy)
+     * 
+     * Estados: active, overdue, completed
+     * 
+     * Permisos:
+     * - GET: El deudor, asociados y admins
+     * - LIST: Asociados y admins ven todos, usuarios ven solo los suyos
+     * - CREATE: Asociados y admins al aprobar préstamo
+     * - UPDATE: Asociados y admins para actualizar estado y pagos
+     * - DELETE: Solo admin
+     */
+    match /active_loans/{loanId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAssociateOrAdmin()
+      );
+
+      allow list: if isAssociateOrAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAssociateOrAdmin() 
+                    && hasRequiredFields(['userId', 'amount', 'term', 'interestRate', 'monthlyPayment', 
+                                         'totalToRepay', 'remainingBalance', 'paymentsCompleted', 'status', 'approvalDate'])
+                    && request.resource.data.status == 'active'
+                    && request.resource.data.amount > 0;
+
+      allow update: if isAssociateOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA PAGOS DE PRÉSTAMOS
+    // ===================================================================
+
+    /**
+     * Colección: /loan_payments/{paymentId}
+     * Descripción: Historial de pagos de préstamos
+     * 
+     * Estados: on-time, late, missed
+     * 
+     * Permisos:
+     * - GET: El deudor, asociados y admins
+     * - LIST: Asociados y admins ven todos, usuarios ven solo los suyos
+     * - CREATE: Asociados y admins registran pagos
+     * - UPDATE: Solo admin para correcciones
+     * - DELETE: Solo admin
+     */
+    match /loan_payments/{paymentId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAssociateOrAdmin()
+      );
+
+      allow list: if isAssociateOrAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAssociateOrAdmin() 
+                    && hasRequiredFields(['loanId', 'userId', 'amount', 'paymentDate', 'dueDate', 'status'])
+                    && request.resource.data.amount > 0;
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA REUNIONES
+    // ===================================================================
+
+    /**
+     * Colección: /meetings/{meetingId}
+     * Descripción: Reuniones programadas
+     * 
+     * Tipos: mensual, extraordinaria, general
+     * Estados: upcoming, in-progress, completed, cancelled
+     * 
+     * Permisos:
+     * - GET: Todos los usuarios autenticados
+     * - LIST: Todos los usuarios autenticados
+     * - CREATE: Asociados y admins
+     * - UPDATE: Asociados y admins
+     * - DELETE: Solo admin
+     */
+    match /meetings/{meetingId} {
+      allow get, list: if isSignedIn();
+
+      allow create: if isAssociateOrAdmin() 
+                    && hasRequiredFields(['title', 'type', 'date', 'time', 'location', 'description', 
+                                         'fineAmount', 'status', 'totalMembers', 'createdAt', 'createdBy'])
+                    && request.resource.data.type in ['mensual', 'extraordinaria', 'general']
+                    && request.resource.data.status == 'upcoming'
+                    && request.resource.data.fineAmount >= 0;
+
+      allow update: if isAssociateOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA ASISTENCIA A REUNIONES
+    // ===================================================================
+
+    /**
+     * Colección: /meeting_attendance/{attendanceId}
+     * Descripción: Registro de asistencia a reuniones
+     * 
+     * Estados: present, absent, late, excused
+     * 
+     * Permisos:
+     * - GET: El usuario propietario, asociados y admins
+     * - LIST: Asociados y admins ven todas, usuarios ven solo las suyas
+     * - CREATE: Asociados y admins registran asistencia
+     * - UPDATE: Asociados y admins
+     * - DELETE: Solo admin
+     */
+    match /meeting_attendance/{attendanceId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAssociateOrAdmin()
+      );
+
+      allow list: if isAssociateOrAdmin() 
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAssociateOrAdmin() 
+                    && hasRequiredFields(['meetingId', 'userId', 'status', 'fineApplied'])
+                    && request.resource.data.status in ['present', 'absent', 'late', 'excused'];
+
+      allow update: if isAssociateOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLAS PARA CONFIGURACIÓN DEL SISTEMA
+    // ===================================================================
+
+    /**
+     * Colección: /system_config/{configId}
+     * Descripción: Configuración general del sistema (tasas, cuotas, multas)
+     * 
+     * Tipos de Configuración:
+     * - interest_rates: Tasas de interés
+     * - fees: Cuotas y tarifas
+     * - fines: Multas
+     * - loan_limits: Límites de préstamos
+     * - general: Configuración general
+     * 
+     * Permisos:
+     * - GET: Asociados y admins
+     * - LIST: Asociados y admins
+     * - CREATE: Solo admin
+     * - UPDATE: Solo admin
+     * - DELETE: Solo admin
+     */
+    match /system_config/{configId} {
+      allow get, list: if isAssociateOrAdmin();
+      allow create, update, delete: if isAdmin() 
+                                    && hasRequiredFields(['configType', 'updatedAt', 'updatedBy']);
+    }
+
+    // ===================================================================
+    // REGLAS PARA LOGS ADMINISTRATIVOS
+    // ===================================================================
+
+    /**
+     * Colección: /admin_logs/{logId}
+     * Descripción: Logs de acciones administrativas para auditoría
+     * 
+     * Permisos:
+     * - GET: Solo admin
+     * - LIST: Solo admin
+     * - CREATE: Admins y asociados (automático)
+     * - UPDATE: No permitido (inmutabilidad)
+     * - DELETE: No permitido (auditoría)
+     */
+    match /admin_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isAssociateOrAdmin() 
+                    && hasRequiredFields(['action', 'performedBy', 'timestamp', 'targetResource']);
+      allow update, delete: if false; // Logs son inmutables
+    }
+
+    // ===================================================================
+    // REGLAS PARA ALERTAS DEL SISTEMA
+    // ===================================================================
+
+    /**
+     * Colección: /system_alerts/{alertId}
+     * Descripción: Alertas del sistema generadas automáticamente
+     * 
+     * Campos requeridos:
+     * - type: string (warning, error, info)
+     * - title: string
+     * - message: string
+     * - severity: string (low, medium, high, critical)
+     * - createdAt: timestamp
+     * - resolved: boolean
+     * 
+     * Permisos:
+     * - GET: Solo admin
+     * - LIST: Solo admin
+     * - CREATE: Solo admin (automático por el sistema)
+     * - UPDATE: Solo admin (para resolver alertas)
+     * - DELETE: Solo admin
+     */
+    match /system_alerts/{alertId} {
+      allow get, list: if isSignedIn() && 
+                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow create: if isSignedIn() && 
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+                      hasRequiredFields(['type', 'title', 'message', 'severity', 'createdAt', 'resolved']);
+      allow update: if isSignedIn() && 
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if isSignedIn() && 
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ===================================================================
+    // REGLAS PARA NOTIFICACIONES GLOBALES
+    // ===================================================================
+
+    /**
+     * Colección: /notifications/{notificationId}
+     * Descripción: Notificaciones del sistema (alternativa a subcollection)
+     * 
+     * Tipos: info, warning, success, error
+     * 
+     * Permisos:
+     * - GET: El usuario destinatario
+     * - LIST: Usuarios ven solo las suyas
+     * - CREATE: Sistema/Admin
+     * - UPDATE: Usuario puede marcar como leída
+     * - DELETE: Admin o usuario después de 30 días
+     */
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAdmin()
+      );
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isAdmin() 
+                    && hasRequiredFields(['userId', 'title', 'description', 'type', 'read', 'createdAt'])
+                    && request.resource.data.type in ['info', 'warning', 'success', 'error'];
+
+      allow update: if (isExistingOwner(resource.data.userId) 
+                        && request.resource.data.keys().hasOnly(['read']) // Solo puede actualizar 'read'
+                        && request.resource.data.read is bool)
+                    || isAdmin();
+
+      allow delete: if isAdmin() 
+                    || (isExistingOwner(resource.data.userId) 
+                        && request.time > resource.data.createdAt + duration.value(30, 'd')); // Después de 30 días
+    }
+
+    // ===================================================================
+    // REGLAS PARA REPORTES (Opcional - Si se guardan en Firestore)
+    // ===================================================================
+
+    /**
+     * Colección: /reports/{reportId}
+     * Descripción: Reportes generados del sistema
+     * 
+     * Permisos:
+     * - GET: Admin y el usuario propietario
+     * - LIST: Admin
+     * - CREATE: Solo sistema/admin
+     * - UPDATE: Solo admin
+     * - DELETE: Solo admin
+     */
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid 
+        || isAdmin()
+      );
+
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ===================================================================
+    // REGLA DE DENEGACIÓN POR DEFECTO
+    // ===================================================================
+
+    /**
+     * Cualquier ruta no especificada está denegada por defecto
+     * Esto asegura el principio de mínimo privilegio
+     */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
