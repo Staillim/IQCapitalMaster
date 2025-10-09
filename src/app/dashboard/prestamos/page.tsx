@@ -6,6 +6,7 @@ import { useFirebase } from '@/firebase/provider';
 import { getUserLoans, getLoanStats, checkLoanEligibility } from '@/lib/loans-service';
 import { LoanApplication, LoanStatus, LoanStats, LoanEligibility } from '@/types/loans';
 import { AnimatedCard } from '@/components/ui/animated-card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
