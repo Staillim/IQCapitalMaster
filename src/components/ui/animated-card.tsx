@@ -16,11 +16,11 @@ interface AnimatedCardProps {
 
 const gradients = {
   light: 'from-blue-50 via-blue-100 to-blue-200',
-  medium: 'from-blue-200 via-blue-300 to-blue-400',
-  vibrant: 'from-blue-300 via-blue-400 to-blue-500',
-  vivid: 'from-blue-400 via-blue-500 to-blue-600',
-  deep: 'from-blue-500 via-blue-600 to-blue-700',
-  intense: 'from-blue-600 via-blue-700 to-blue-800',
+  medium: 'from-blue-100 via-blue-200 to-blue-300',
+  vibrant: 'from-blue-200 via-blue-300 to-blue-400',
+  vivid: 'from-blue-300 via-blue-400 to-blue-500',
+  deep: 'from-blue-400 via-blue-500 to-blue-600',
+  intense: 'from-blue-500 via-blue-600 to-blue-700',
 };
 
 const orbColors = {
