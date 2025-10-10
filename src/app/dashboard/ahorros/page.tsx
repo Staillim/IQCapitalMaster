@@ -126,7 +126,7 @@ export default function AhorrosPage() {
           title="Saldo Actual"
           description="Tu saldo disponible"
           icon={<Wallet className="h-5 w-5" />}
-          gradient="green"
+          gradient="vibrant"
         >
           {isLoading ? (
             <Skeleton className="h-8 w-32" />
@@ -139,7 +139,7 @@ export default function AhorrosPage() {
           title="Contribución Mensual"
           description={`Meta: ${formatCurrency(SAVINGS_CONSTANTS.MIN_MONTHLY_CONTRIBUTION)}`}
           icon={<TrendingUp className="h-5 w-5" />}
-          gradient="blue"
+          gradient="medium"
         >
           {isLoading ? (
             <Skeleton className="h-8 w-32" />
@@ -167,7 +167,7 @@ export default function AhorrosPage() {
           title="Retiros Disponibles"
           description="Retiros restantes este mes"
           icon={<TrendingDown className="h-5 w-5" />}
-          gradient="orange"
+          gradient="vivid"
         >
           {isLoading ? (
             <Skeleton className="h-8 w-32" />
@@ -183,7 +183,7 @@ export default function AhorrosPage() {
       <AnimatedCard
         title="Acciones Rápidas"
         description="Realiza depósitos o retiros de tu cuenta de ahorros"
-        gradient="purple"
+        gradient="deep"
       >
         <div className="flex flex-col sm:flex-row gap-4">
           <DepositDialog 
@@ -222,7 +222,7 @@ export default function AhorrosPage() {
       <AnimatedCard
         title="Historial de Transacciones"
         description="Últimas 20 operaciones en tu cuenta de ahorros"
-        gradient="teal"
+        gradient="light"
       >
           {isLoading ? (
             <div className="space-y-3">

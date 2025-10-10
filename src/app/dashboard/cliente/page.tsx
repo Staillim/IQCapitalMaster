@@ -84,7 +84,7 @@ export default function ClientDashboardPage() {
           title="Saldo Actual"
           description="Total en todas las cuentas de ahorro"
           icon={<PiggyBank className="h-5 w-5" />}
-          gradient="green"
+          gradient="medium"
         >
           <div className="text-3xl font-bold text-primary">${totalBalance.toFixed(2)}</div>
         </AnimatedCard>
@@ -93,7 +93,7 @@ export default function ClientDashboardPage() {
           title="Préstamos Activos"
           description="Total de préstamos activos"
           icon={<Landmark className="h-5 w-5" />}
-          gradient="blue"
+          gradient="vibrant"
         >
           <div className="text-3xl font-bold text-primary">{loans?.length || 0}</div>
         </AnimatedCard>
@@ -102,7 +102,7 @@ export default function ClientDashboardPage() {
           title="Próximas Reuniones"
           description="Total de reuniones programadas"
           icon={<Calendar className="h-5 w-5" />}
-          gradient="purple"
+          gradient="vivid"
         >
           <div className="text-3xl font-bold text-primary">{meetings?.length || 0}</div>
         </AnimatedCard>
@@ -111,7 +111,7 @@ export default function ClientDashboardPage() {
       <AnimatedCard
         title="Módulos"
         description="Selecciona una opción de la barra de navegación inferior para continuar"
-        gradient="indigo"
+        gradient="deep"
         className="text-center"
       >
         <div className="py-4">

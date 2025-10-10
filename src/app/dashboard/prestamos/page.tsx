@@ -196,7 +196,7 @@ export default function PrestamosPage() {
           title="Total Prestado"
           description="Histórico de préstamos"
           icon={<DollarSign className="h-5 w-5" />}
-          gradient="blue"
+          gradient="vivid"
         >
           <div className="text-3xl font-bold text-primary">
             {formatCurrency(stats?.totalBorrowed || 0)}
@@ -208,7 +208,7 @@ export default function PrestamosPage() {
           title="Total Pagado"
           description="Pagos realizados"
           icon={<CheckCircle2 className="h-5 w-5" />}
-          gradient="green"
+          gradient="vibrant"
         >
           <div className="text-3xl font-bold text-primary">
             {formatCurrency(stats?.totalPaid || 0)}
@@ -220,7 +220,7 @@ export default function PrestamosPage() {
           title="Deuda Actual"
           description={`${activeLoans.length} préstamo(s) activo(s)`}
           icon={<TrendingUp className="h-5 w-5" />}
-          gradient="orange"
+          gradient="intense"
         >
           <div className="text-3xl font-bold text-primary">
             {formatCurrency(stats?.currentDebt || 0)}
@@ -232,7 +232,7 @@ export default function PrestamosPage() {
           title="Puntaje"
           description="Historial crediticio"
           icon={<Percent className="h-5 w-5" />}
-          gradient="purple"
+          gradient="deep"
         >
           <div className="text-3xl font-bold text-primary">{stats?.creditScore || 0}/100</div>
         </AnimatedCard>

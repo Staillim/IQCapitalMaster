@@ -98,7 +98,7 @@ export default function NewLoanRequestPage() {
           title="¡Solicitud Enviada!"
           description="Tu solicitud de préstamo ha sido enviada exitosamente. Un asociado la revisará pronto."
           icon={<CheckCircle2 className="h-8 w-8" />}
-          gradient="green"
+          gradient="vibrant"
           className="border-green-200 bg-green-50/50"
         >
           <div className="flex justify-center pt-4">
@@ -146,7 +146,7 @@ export default function NewLoanRequestPage() {
           <AnimatedCard
             title="Información del Préstamo"
             description="Ingresa los detalles de tu solicitud"
-            gradient="blue"
+            gradient="medium"
           >
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Monto */}
@@ -267,7 +267,7 @@ export default function NewLoanRequestPage() {
           <AnimatedCard
             title="Resumen"
             icon={<Calculator className="h-5 w-5" />}
-            gradient="purple"
+            gradient="vivid"
           >
               <div>
                 <p className="text-sm text-muted-foreground">Monto Solicitado</p>
@@ -311,7 +311,7 @@ export default function NewLoanRequestPage() {
           <AnimatedCard
             title="Información"
             icon={<AlertCircle className="h-5 w-5" />}
-            gradient="orange"
+            gradient="intense"
           >
               <div className="space-y-2">
                 <div className="flex items-start gap-2">
@@ -338,7 +338,7 @@ export default function NewLoanRequestPage() {
           {/* Requirements Card */}
           <AnimatedCard
             title="Requisitos"
-            gradient="green"
+            gradient="light"
           >
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-center gap-2">
